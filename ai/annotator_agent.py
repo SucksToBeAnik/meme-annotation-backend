@@ -1,11 +1,12 @@
+import os
 from langgraph.graph import StateGraph
 
 from langgraph.types import Command
 from langchain_ollama import ChatOllama
-from langchain_community.utilities import GoogleSerperAPIWrapper
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.chat_models import Chat
+from langchain_openai import ChatOpenAI
+from utils import get_openrouter_base_url, get_openrouter_api_key
 
 from pydantic import BaseModel
 from typing import Annotated, Literal
@@ -22,19 +23,6 @@ class WorkflowState(BaseModel):
     """State for the workflow."""
 
     image_url: Annotated[str, "URL of the image to be processed"]
-    search_keyword: Annotated[
-        str | None, "Keyword used for searching the meme image context"
-    ] = None
-    search_results: Annotated[
-        list[SerperSearchResults] | None, "Search results from Google Serper"
-    ] = None
-    context: Annotated[
-        str | None,
-        "Extra information extracted from the web to better explain the meme image",
-    ] = None
-    final_context_url: Annotated[
-        str | None, "URL of the final context, if available"
-    ] = None
     explanation: Annotated[
         str | None,
         "Explanation of the meme image, where the humor has occurred in the meme",
@@ -55,7 +43,7 @@ class WorkflowState(BaseModel):
     ] = None
 
 
-async def meme_overview(state: WorkflowState) -> Command[Literal["__end__"]]:
+async def meme_overview(state: WorkflowState) -> Command[Literal["__end__", "translator_node"]]:
     """
     Overview of the meme image, including its explanation, genre, roles, and sentiment.
     """
@@ -79,9 +67,11 @@ async def meme_overview(state: WorkflowState) -> Command[Literal["__end__"]]:
             str, "Sentiment of the meme image, e.g., 'positive', 'negative', 'neutral'"
         ]
 
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
-        temperature=0.7,
+    llm = ChatOpenAI(
+        base_url=get_openrouter_base_url(),
+        api_key=get_openrouter_api_key(),
+        model="google/gemini-2.0-flash-001",
+        temperature=0.5,
     ).with_structured_output(ExpectedOutput)
 
     with open("ai/prompts/meme_overview.md", "r") as f:
@@ -113,7 +103,7 @@ async def meme_overview(state: WorkflowState) -> Command[Literal["__end__"]]:
 
     if isinstance(response, ExpectedOutput):
         return Command(
-            goto="__end__",
+            goto="translator_node",
             update={
                 "explanation": response.explanation,
                 "genre": response.genre,
@@ -128,9 +118,62 @@ async def meme_overview(state: WorkflowState) -> Command[Literal["__end__"]]:
         return Command(goto="__end__")
 
 
+async def translator(state: WorkflowState) -> Command[Literal["__end__"]]:
+    """
+    Translate the explanation of the meme image into Bengali.
+    """
+
+    class TranslationOutput(BaseModel):
+        """Expected output for translation of the explanation."""
+
+        translated_explanation: Annotated[str, "The explanation translated in Bengali"]
+
+    translator_llm = ChatOpenAI(
+        base_url=get_openrouter_base_url(),
+        api_key=get_openrouter_api_key(),
+        model="deepseek/deepseek-r1-0528:free",
+    ).with_structured_output(TranslationOutput)
+
+    translator_prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "You are a translation assistant that translates explanations into Bengali. "
+                "Translate the provided explanation into Bengali, preserving the original meaning.",
+            ),
+            (
+                "human",
+                [
+                    {
+                        "type": "text",
+                        "text": "Translate this explanation into Bengali:",
+                    },
+                    {"type": "text", "text": "{explanation}"},
+                ],
+            ),
+        ]
+    )
+
+    translator_chain = translator_prompt | translator_llm
+    translator_response = await translator_chain.ainvoke(
+        {"explanation": state.explanation}
+    )
+
+    print("Translator response:", translator_response)
+
+    if isinstance(translator_response, TranslationOutput):
+        return Command(
+            goto="__end__",
+            update={"explanation": translator_response.translated_explanation},
+        )
+    else:
+        return Command(goto="__end__")
+
+
 workflow = StateGraph(WorkflowState)
 
 workflow.add_node("meme_overview_node", meme_overview)
+workflow.add_node("translator_node", translator)
 workflow.set_entry_point("meme_overview_node")
 
 AnnotatorAgent = workflow.compile()

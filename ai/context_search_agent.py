@@ -5,12 +5,15 @@ from langchain_core.tools import Tool
 from langchain_community.utilities import GoogleSerperAPIWrapper
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 from typing import Annotated, Literal
 from dotenv import load_dotenv
 import os
 
 load_dotenv()
+
+from utils import get_openrouter_base_url, get_openrouter_api_key
 
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 
@@ -52,8 +55,10 @@ async def search_context(state: WorkflowState) -> Command[Literal["__end__"]]:
         ]
 
     # First, generate a search keyword based on the image
-    keyword_llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
+    keyword_llm = ChatOpenAI(
+        base_url=get_openrouter_base_url(),
+        api_key=get_openrouter_api_key(),
+        model="google/gemini-2.0-flash-001",
         temperature=0.2,
     ).with_structured_output(SearchKeywordOutput)
 
@@ -90,6 +95,8 @@ async def search_context(state: WorkflowState) -> Command[Literal["__end__"]]:
         search_keyword = keyword_response.search_keyword
         search_result = search.run(search_keyword)
 
+        print("---Search result:----", search_result)
+
         class BengaliTranslationOutput(BaseModel):
             """Expected output for translation of the search result."""
 
@@ -100,29 +107,30 @@ async def search_context(state: WorkflowState) -> Command[Literal["__end__"]]:
         # translator_llm = ChatOllama(
         #     model="qwen2.5vl:7b", temperature=0.1, base_url="http://localhost:11434"
         # ).with_structured_output(BengaliTranslationOutput)
-        translator_llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
-            temperature=0.1,
+        translator_llm = ChatOpenAI(
+            base_url=get_openrouter_base_url(),
+            api_key=get_openrouter_api_key(),
+            model="google/gemini-2.0-flash-001",
         ).with_structured_output(BengaliTranslationOutput)
         translator_prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    "You are a translation assistant that translates search results into Bengali. "
-                    "Translate the provided search result snippet into Bengali, preserving the original meaning. If a sentence is half-formed or incomplete in the original language, try to complete it in Bengali.",
-                ),
-                (
-                    "human",
-                    [
-                        {
-                            "type": "text",
-                            "text": "Translate this search result snippet into Bengali:",
-                        },
-                        {"type": "text", "text": "{snippet}"},
-                    ],
-                ),
-            ]
-        )
+        [
+            (
+                "system",
+                "You are a translation assistant that translates text of snippets into Bengali. "
+                "Translate the provided snippet into Bengali, preserving the original meaning.",
+            ),
+            (
+                "human",
+                [
+                    {
+                        "type": "text",
+                        "text": "Translate this snippet into Bengali:",
+                    },
+                    {"type": "text", "text": "{snippet}"},
+                ],
+            ),
+        ]
+    )
         print("Translator prompt:", translator_prompt)
         translator_chain = translator_prompt | translator_llm
         translator_response = await translator_chain.ainvoke({"snippet": search_result})

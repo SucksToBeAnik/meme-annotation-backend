@@ -13,6 +13,9 @@ from typing import List, Dict, Any
 from pathlib import Path
 from routes.annotation.annotation import router as annotation_router
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
+from utils import get_openrouter_base_url, get_openrouter_api_key
 
 from dotenv import load_dotenv
 
@@ -50,9 +53,14 @@ async def extract_ocr_text_from_image(file_content: bytes, file_mime_type: str):
     # llm = ChatOllama(
     #     model="qwen2.5vl:7b", temperature=0.1, base_url="http://localhost:11434"
     # )
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.0-flash",
-        temperature=0.1,
+    # llm = ChatGoogleGenerativeAI(
+    #     model="gemini-2.0-flash",
+    #     temperature=0.1,
+    # )
+    llm = ChatOpenAI(
+        base_url=get_openrouter_base_url(),
+        api_key=get_openrouter_api_key(),
+        model="google/gemini-2.0-flash-001"
     )
 
     message = HumanMessage(
@@ -303,7 +311,7 @@ async def process_files_in_batches(
 ) -> List[Dict[str, Any]]:
     """Process files in controlled batches to avoid overwhelming the system."""
     results = []
-    
+
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_UPLOADS)
 
     async def process_with_semaphore(file: UploadFile):
