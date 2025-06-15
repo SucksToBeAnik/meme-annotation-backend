@@ -23,7 +23,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "fastapi", extras = ["standar", "standard"], specifier = ">=0.115.12" },
+    { name = "fastapi", extras = ["standard"], specifier = ">=0.115.12" },
     { name = "langchain", specifier = ">=0.3.25" },
     { name = "langchain-community", specifier = ">=0.3.25" },
     { name = "langchain-ollama", specifier = ">=0.3.3" },

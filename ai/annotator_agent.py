@@ -3,7 +3,6 @@ from langgraph.graph import StateGraph
 
 from langgraph.types import Command
 from langchain_ollama import ChatOllama
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from utils import get_openrouter_base_url, get_openrouter_api_key

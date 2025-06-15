@@ -3,7 +3,6 @@ from langgraph.types import Command
 from langchain_ollama import ChatOllama
 from langchain_core.tools import Tool
 from langchain_community.utilities import GoogleSerperAPIWrapper
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel

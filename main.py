@@ -12,7 +12,6 @@ import logging
 from typing import List, Dict, Any
 from pathlib import Path
 from routes.annotation.annotation import router as annotation_router
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 from utils import get_openrouter_base_url, get_openrouter_api_key
